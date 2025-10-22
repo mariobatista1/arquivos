@@ -1,0 +1,136 @@
+# playercore_retain/docker-compose.yml
+
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: playercore-postgres
+    environment:
+      POSTGRES_DB: playercore_retain
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: playercore123
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - playercore-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: playercore-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@playercore.com
+      PGADMIN_DEFAULT_PASSWORD: playercore123
+    ports:
+      - "5050:80"
+    networks:
+      - playercore-network
+    depends_on:
+      - postgres
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: playercore-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - playercore-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # Backend NestJS
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: playercore-backend
+    restart: unless-stopped
+    ports:
+      - "5002:5002"
+    environment:
+      NODE_ENV: development
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      ML_API_URL: http://playercore-ml:5003
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - playercore-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      ml-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend Next.js (preparado para futuro)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: playercore-frontend
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:3000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - playercore-network
+    depends_on:
+      - backend
+    profiles:
+      - frontend
+
+  # Machine Learning FastAPI (preparado para futuro)
+  ml-api:
+    build:
+      context: ./machine-learning
+      dockerfile: Dockerfile
+    container_name: playercore-ml
+    restart: unless-stopped
+    ports:
+      - "5003:5003"
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    volumes:
+      - ./machine-learning:/app
+    networks:
+      - playercore-network
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  redis_data:
+    driver: local
+  postgres_data:
+    driver: local
+
+networks:
+  playercore-network:
+    driver: bridge
