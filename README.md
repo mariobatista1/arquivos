@@ -13,7 +13,7 @@ ALTER TABLE gateway_config ADD COLUMN webhook_secret varchar(255);
 cria primeiro o banco no pgadmin e depois sobe o dump
 
 conexão pgadmin docker:
-Host name/address => playercore-postgres ✅
+Host name/address => playercore-postgres
 Port => 5432
 Maintenance database => playercore_retain
 Username => postgres
